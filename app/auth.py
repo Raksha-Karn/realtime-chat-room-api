@@ -29,15 +29,18 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expires_at})
     return jwt.encode(to_encode, key=SECRET_KEY, algorithm=ALGORITHM)
 
-def decode_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try: 
+def get_user_from_token(token: str, db: Session):
+    try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")
         if email is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid credentials", headers={"WWW-Authenticate: Bearer"})
+            return None
+        return db.execute(select(User).where(User.email == email)).scalar_one_or_none()
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token", headers={"WWW-Authenticate": "Bearer"})
-    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        return None
+
+def decode_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    user = get_user_from_token(token, db)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate: Bearer"})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"})
     return user

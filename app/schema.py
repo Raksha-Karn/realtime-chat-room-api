@@ -5,24 +5,26 @@ from pydantic import BaseModel, EmailStr
 
 class UserCreate(BaseModel):
     email: EmailStr
+    username: str
     password: str
 
 
 class UserOut(BaseModel):
     id: int
     email: EmailStr
+    username: str
     model_config = {"from_attributes": True}
 
 
 class RoomCreate(BaseModel):
     name: str
-    desc: Optional[str] = None
+    description: Optional[str] = None
 
 
 class RoomOut(BaseModel):
     id: int
     name: str
-    desc: Optional[str]
+    description: Optional[str]
     created_at: datetime
     model_config = {"from_attributes": True}
 

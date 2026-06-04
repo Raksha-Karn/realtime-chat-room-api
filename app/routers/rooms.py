@@ -1,7 +1,7 @@
 from app.auth import decode_token
 from app.database import get_db
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models import Room, Message
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.schema import RoomOut, RoomCreate, MessageOut
@@ -25,4 +25,14 @@ def list_rooms(db: Session = Depends(get_db), user = Depends(decode_token)):
 
 @router.get("/{room_id}/history", response_model=list[MessageOut])
 def room_history(room_id: int, limit: int = 50, db: Session = Depends(get_db), user = Depends(decode_token)):
-    return (db.execute(select(Message).where(Message.room_id == room_id).order_by(Message.created_at.desc()).limit(limit)).scalars().all())
+    messages = (db.execute(select(Message).options(joinedload(Message.sender)).where(Message.room_id == room_id).order_by(Message.created_at.desc()).limit(limit)).scalars().all())
+    return [
+        {
+            "id": msg.id,
+            "content": msg.content,
+            "sender_id": msg.sender_id,
+            "username": msg.sender.username,
+            "created_at": msg.created_at,
+        }
+        for msg in messages
+    ]

@@ -1,15 +1,24 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY pyproject.toml uv.lock* ./
+RUN uv venv /opt/venv
 
-RUN uv sync --frozen
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --frozen --no-install-project
 
 COPY . .
 
-EXPOSE 8000
+RUN uv sync --frozen
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN mkdir -p /storage
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+EXPOSE 8000

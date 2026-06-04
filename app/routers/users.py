@@ -3,7 +3,7 @@ from app.database import get_db
 from fastapi.security import OAuth2PasswordRequestForm
 from app.models import User
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.schema import UserOut, UserCreate, Token
+from app.schema import UserOut, UserCreate, Token, UserSearchOut
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -11,9 +11,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserOut, status_code=201)
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    existing = db.execute(select(User).where(User.email == user.email)).scalar_one_or_none()
+    existing = db.execute(select(User).where((User.email == user.email) | (User.username == user.username))).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists!")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email or username already exists!")
     new_user = User(email=user.email, username=user.username, hashed_password=hash_password(user.password))
     db.add(new_user); db.commit(); db.refresh(new_user)
     return new_user
@@ -33,3 +33,17 @@ def get_me(current_user=Depends(decode_token)):
         "username": current_user.username,
         "email": current_user.email,
     }
+
+@router.get("/users/search", response_model=list[UserSearchOut])
+def search_users(q: str, db: Session = Depends(get_db), current_user=Depends(decode_token)):
+    term = q.strip()
+    if len(term) < 2:
+        return []
+    pattern = f"%{term}%"
+    return db.execute(
+        select(User)
+        .where(User.is_deleted == False)
+        .where(User.username.ilike(pattern))
+        .order_by(User.username.asc())
+        .limit(20)
+    ).scalars().all()

@@ -39,5 +39,6 @@ class MessageOut(BaseModel):
     content: str
     sender_id: int
     room_id: int
+    username: str
     created_at: datetime
     model_config = {"from_attributes": True}

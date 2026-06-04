@@ -244,6 +244,63 @@
   }
   .msg-input::placeholder { color: #b0a08a; }
 
+  .icon-btn {
+    width: 42px;
+    height: 42px;
+    border: 1.5px solid #e8dcc8;
+    background: rgba(255,255,255,0.86);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  }
+  .icon-btn:hover { background: white; border-color: rgba(138,171,138,0.6); }
+  .icon-btn.active { background: rgba(201,123,99,0.14); border-color: rgba(201,123,99,0.5); }
+
+  .emoji-panel {
+    position: absolute;
+    bottom: 74px;
+    left: 20px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.95);
+    border: 1px solid rgba(228,216,196,0.8);
+    box-shadow: 0 8px 32px rgba(26,18,9,0.15);
+  }
+  .emoji-panel button {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 18px;
+  }
+  .emoji-panel button:hover { background: rgba(138,171,138,0.12); }
+
+  .media-preview {
+    max-width: min(320px, 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(228,216,196,0.7);
+    display: block;
+    margin-top: 6px;
+  }
+
+  .search-result {
+    border-radius: 10px;
+    padding: 9px 10px;
+    cursor: pointer;
+    background: rgba(255,255,255,0.45);
+    border: 1px solid rgba(228,216,196,0.45);
+  }
+  .search-result:hover { background: rgba(138,171,138,0.12); }
+
   .send-btn {
     width: 42px; height: 42px;
     background: linear-gradient(135deg, #4d7049, #6b9168);
@@ -452,9 +509,14 @@
           </div>
           <div style="width:8px;height:8px;background:#6b9168;border-radius:50%;margin-left:auto;flex-shrink:0;box-shadow:0 0 0 2px rgba(107,145,104,0.25);"></div>
         </div>
+
+        <div class="mt-3">
+          <input type="search" id="globalSearch" class="field" style="padding:10px 12px;border-radius:10px;font-size:13px;" placeholder="Search users and messages" oninput="handleGlobalSearch()" />
+        </div>
       </div>
 
       <div class="flex-1 overflow-y-auto custom-scroll p-3">
+        <div id="searchResults" class="hidden mb-4 space-y-1"></div>
         <div class="flex items-center justify-between px-1 mb-2">
           <span class="tag" style="color:#8a7a62;background:rgba(228,216,196,0.4);letter-spacing:0.06em;">ROOMS</span>
           <button onclick="showCreateRoomModal()"
@@ -520,8 +582,25 @@
           </div>
         </div>
 
-        <div class="msg-input-bar px-5 py-4">
+        <div class="msg-input-bar px-5 py-4" style="position:relative;">
+          <div id="emojiPanel" class="emoji-panel hidden"></div>
+          <input type="file" id="mediaInput" class="hidden" accept="image/*,audio/*,video/*,.pdf,.txt,.zip" onchange="handleMediaSelected(event)" />
           <div class="flex items-end gap-3">
+            <button class="icon-btn" onclick="toggleEmojiPanel()" title="Emoji">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a7a62" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
+              </svg>
+            </button>
+            <button class="icon-btn" onclick="document.getElementById('mediaInput').click()" title="Attach media">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a7a62" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <button class="icon-btn" id="recordBtn" onclick="toggleRecording()" title="Record voice note">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a7a62" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+            </button>
             <textarea id="messageInput"
               class="msg-input"
               placeholder="Type a message…"
@@ -578,7 +657,7 @@
 </div>
 
 <script>
-let API_BASE = window.location.origin;
+let API_BASE = localStorage.getItem('chatApiBase') || window.location.origin;
 document.getElementById('apiUrlDisplay').textContent = API_BASE.replace(/^https?:\/\//, '');
 document.getElementById('apiUrlInput').value = API_BASE;
 
@@ -595,8 +674,14 @@ let currentUser = JSON.parse(localStorage.getItem('chatUser') || 'null');
 let currentRoom = null;
 let ws = null;
 let rooms = [];
+let activeMessages = [];
+let searchTimer = null;
+let mediaRecorder = null;
+let recordingChunks = [];
+const emojis = ['😀','😂','😊','😍','😎','🙌','👍','🙏','🔥','✨','🎉','❤️','✅','👀','💬','🤝','😅','🥳','💡','🚀','📌','🫡','🤔','😴'];
 
 window.onload = () => {
+  initEmojiPanel();
   if (authToken && currentUser) {
     showApp();
   }
@@ -607,6 +692,32 @@ function showToast(msg, duration = 2600) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function resetChatState() {
+  if (ws) {
+    ws.onclose = null;
+    ws.close();
+  }
+  ws = null;
+  currentRoom = null;
+  activeMessages = [];
+  document.getElementById('messagesContainer').innerHTML = '';
+  document.getElementById('messageInput').value = '';
+  document.getElementById('globalSearch').value = '';
+  document.getElementById('searchResults').classList.add('hidden');
+  document.getElementById('searchResults').innerHTML = '';
+  document.getElementById('chatView').classList.add('hidden');
+  document.getElementById('noRoomSelected').classList.remove('hidden');
+  setWsStatus('disconnected');
+}
+
+function requireOpenSocket() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    showToast('Still connecting. Try again in a moment.');
+    return false;
+  }
+  return true;
 }
 
 function switchTab(tab) {
@@ -661,8 +772,9 @@ localStorage.setItem(
   'chatUser',
   JSON.stringify(currentUser)
 );
+    resetChatState();
     showApp();
-    showToast('Welcome back! 🌿');
+    showToast('Welcome back');
   } catch (e) {
     showToast(e.message);
   } finally {
@@ -696,7 +808,7 @@ async function handleRegister() {
 }
 
 function handleLogout() {
-  if (ws) ws.close();
+  resetChatState();
   authToken = null; currentUser = null; currentRoom = null;
   localStorage.removeItem('chatToken');
   localStorage.removeItem('chatUser');
@@ -706,6 +818,7 @@ function handleLogout() {
 }
 
 async function showApp() {
+  resetChatState();
   document.getElementById('authScreen').classList.add('hidden');
   const app = document.getElementById('appScreen');
   app.style.display = 'flex';
@@ -758,8 +871,9 @@ function renderRooms() {
 
 async function joinRoom(room) {
   if (currentRoom && currentRoom.id === room.id) return;
-  if (ws) { ws.close(); ws = null; }
+  if (ws) { ws.onclose = null; ws.close(); ws = null; }
   currentRoom = room;
+  activeMessages = [];
   renderRooms();
 
   document.getElementById('noRoomSelected').classList.add('hidden');
@@ -773,21 +887,24 @@ async function joinRoom(room) {
     const res = await fetch(`${API_BASE}/rooms/${room.id}/history`, {
       headers: { Authorization: `Bearer ${authToken}` }
     });
-    if (res.ok) {
-      const history = await res.json();
-      history.reverse().forEach(msg => {
-        appendMessage({
-          type: 'message',
-          id: msg.id,
-          content: msg.content,
-          sender_id: msg.sender_id,
-          timestamp: msg.created_at,
-          username: msg.username
-        }, true);
-      });
-      scrollToBottom();
-    }
-  } catch(e) {}
+    if (!res.ok) throw new Error('Could not load message history');
+    const history = await res.json();
+    history.forEach(msg => appendMessage({
+      type: 'message',
+      id: msg.id,
+      content: msg.content,
+      message_type: msg.message_type,
+      media_url: msg.media_url,
+      media_name: msg.media_name,
+      sender_id: msg.sender_id,
+      room_id: msg.room_id,
+      timestamp: msg.created_at,
+      username: msg.username
+    }));
+    scrollToBottom();
+  } catch(e) {
+    showToast(e.message);
+  }
 
   connectWS(room.id);
   document.getElementById('messageInput').focus();
@@ -809,6 +926,10 @@ function connectWS(roomId) {
   ws.onerror = () => setWsStatus('disconnected');
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
+    if (msg.type === 'error') {
+      showToast(msg.content || 'Message failed');
+      return;
+    }
     appendMessage(msg);
     scrollToBottom();
   };
@@ -828,6 +949,8 @@ function setWsStatus(state) {
 
 function appendMessage(msg, prepend = false) {
   const container = document.getElementById('messagesContainer');
+  if (msg.id && activeMessages.some(m => m.id === msg.id)) return;
+  if (msg.id) activeMessages.push(msg);
 
   if (msg.type === 'system') {
     const div = document.createElement('div');
@@ -837,8 +960,7 @@ function appendMessage(msg, prepend = false) {
     return;
   }
 
-  const isMine = msg.sender_id && currentUser &&
-    (msg.username === currentUser.username || msg.username === currentUser.email?.split('@')[0]);
+  const isMine = msg.sender_id && currentUser && Number(msg.sender_id) === Number(currentUser.id);
 
   const time = formatTime(msg.timestamp);
   const uname = msg.username || `User ${msg.sender_id}`;
@@ -848,6 +970,7 @@ function appendMessage(msg, prepend = false) {
 
   const wrap = document.createElement('div');
   wrap.className = 'msg-wrap';
+  if (msg.id) wrap.dataset.messageId = msg.id;
   wrap.style.flexDirection = isMine ? 'row-reverse' : 'row';
 
   if (!isMine) {
@@ -855,7 +978,7 @@ function appendMessage(msg, prepend = false) {
       <div class="avatar" style="background:${avatarColor}20;color:${avatarColor};border:1px solid ${avatarColor}30;">${initials}</div>
       <div>
         <div class="text-xs mb-1" style="color:#8a7a62;margin-left:2px;">${escHtml(uname)}</div>
-        <div class="bubble bubble-other">${escHtml(msg.content)}</div>
+        <div class="bubble bubble-other">${renderMessageContent(msg)}</div>
         <div class="text-xs mt-1" style="color:#c4b89a;margin-left:2px;">${time}</div>
       </div>
     `;
@@ -863,13 +986,32 @@ function appendMessage(msg, prepend = false) {
     wrap.innerHTML = `
       <div class="avatar" style="background:linear-gradient(135deg,#4d7049,#8aab8a);color:white;">${initials}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;">
-        <div class="bubble bubble-mine">${escHtml(msg.content)}</div>
+        <div class="bubble bubble-mine">${renderMessageContent(msg)}</div>
         <div class="text-xs mt-1" style="color:#c4b89a;margin-right:2px;">${time}</div>
       </div>
     `;
   }
 
   if (prepend) container.prepend(wrap); else container.appendChild(wrap);
+}
+
+function renderMessageContent(msg) {
+  const content = escHtml(msg.content || '');
+  const mediaUrl = escHtml(msg.media_url || '');
+  const mediaName = escHtml(msg.media_name || 'Attachment');
+  if (!mediaUrl) return content;
+  const type = msg.message_type || 'file';
+  let media = '';
+  if (type === 'image') {
+    media = `<img class="media-preview" src="${mediaUrl}" alt="${mediaName}" loading="lazy" />`;
+  } else if (type === 'audio') {
+    media = `<audio class="media-preview" controls src="${mediaUrl}"></audio>`;
+  } else if (type === 'video') {
+    media = `<video class="media-preview" controls src="${mediaUrl}"></video>`;
+  } else {
+    media = `<a href="${mediaUrl}" download="${mediaName}" target="_blank" rel="noopener" style="text-decoration:underline;">${mediaName}</a>`;
+  }
+  return content ? `${content}${media}` : media;
 }
 
 function scrollToBottom() {
@@ -880,8 +1022,8 @@ function scrollToBottom() {
 function sendMessage() {
   const input = document.getElementById('messageInput');
   const text = input.value.trim();
-  if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(text);
+  if (!text || !requireOpenSocket()) return;
+  ws.send(JSON.stringify({ message_type: 'text', content: text }));
   input.value = '';
   input.style.height = 'auto';
   input.focus();
@@ -897,6 +1039,164 @@ function handleMsgKeydown(e) {
 function autoResizeTextarea(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function initEmojiPanel() {
+  const panel = document.getElementById('emojiPanel');
+  panel.innerHTML = emojis.map(emoji => `<button type="button" onclick="insertEmoji('${emoji}')">${emoji}</button>`).join('');
+}
+
+function toggleEmojiPanel() {
+  document.getElementById('emojiPanel').classList.toggle('hidden');
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById('messageInput');
+  const start = input.selectionStart || input.value.length;
+  const end = input.selectionEnd || input.value.length;
+  input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+  input.focus();
+  input.selectionStart = input.selectionEnd = start + emoji.length;
+  autoResizeTextarea(input);
+}
+
+async function handleMediaSelected(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file || !requireOpenSocket()) return;
+  if (file.size > 2 * 1024 * 1024) {
+    showToast('Please choose a file under 2 MB');
+    return;
+  }
+  const mediaUrl = await readFileAsDataUrl(file);
+  const messageType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'file';
+  ws.send(JSON.stringify({
+    message_type: messageType,
+    content: document.getElementById('messageInput').value.trim(),
+    media_url: mediaUrl,
+    media_name: file.name
+  }));
+  document.getElementById('messageInput').value = '';
+  document.getElementById('emojiPanel').classList.add('hidden');
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function toggleRecording() {
+  const btn = document.getElementById('recordBtn');
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  if (!requireOpenSocket()) return;
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    showToast('Voice notes are not supported in this browser');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordingChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = event => {
+      if (event.data.size) recordingChunks.push(event.data);
+    };
+    mediaRecorder.onstop = async () => {
+      btn.classList.remove('active');
+      stream.getTracks().forEach(track => track.stop());
+      const blob = new Blob(recordingChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      if (blob.size > 2 * 1024 * 1024) {
+        showToast('Voice note is too large');
+        return;
+      }
+      const file = new File([blob], `voice-note-${Date.now()}.webm`, { type: blob.type });
+      const mediaUrl = await readFileAsDataUrl(file);
+      ws.send(JSON.stringify({
+        message_type: 'audio',
+        content: 'Voice note',
+        media_url: mediaUrl,
+        media_name: file.name
+      }));
+    };
+    mediaRecorder.start();
+    btn.classList.add('active');
+    showToast('Recording voice note');
+  } catch (e) {
+    showToast('Microphone permission was denied');
+  }
+}
+
+function handleGlobalSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runGlobalSearch, 250);
+}
+
+async function runGlobalSearch() {
+  const query = document.getElementById('globalSearch').value.trim();
+  const box = document.getElementById('searchResults');
+  if (query.length < 2) {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    return;
+  }
+  try {
+    const [usersRes, messagesRes] = await Promise.all([
+      fetch(`${API_BASE}/auth/users/search?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${authToken}` } }),
+      fetch(`${API_BASE}/rooms/search/messages?q=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${authToken}` } })
+    ]);
+    const users = usersRes.ok ? await usersRes.json() : [];
+    const messages = messagesRes.ok ? await messagesRes.json() : [];
+    renderSearchResults(users, messages);
+  } catch (e) {
+    showToast('Search failed');
+  }
+}
+
+function renderSearchResults(users, messages) {
+  const box = document.getElementById('searchResults');
+  const roomById = new Map(rooms.map(room => [room.id, room]));
+  const userHtml = users.map(user => `
+    <div class="search-result">
+      <div class="text-xs font-medium" style="color:#1a1209;">${escHtml(user.username)}</div>
+      <div class="text-xs truncate" style="color:#8a7a62;">User</div>
+    </div>
+  `).join('');
+  const messageHtml = messages.map(msg => {
+    const room = roomById.get(msg.room_id);
+    const roomName = room ? room.name : `Room ${msg.room_id}`;
+    return `
+      <div class="search-result" onclick="openSearchMessage(${msg.room_id}, ${msg.id})">
+        <div class="text-xs font-medium truncate" style="color:#1a1209;">${escHtml(msg.username)} in ${escHtml(roomName)}</div>
+        <div class="text-xs truncate" style="color:#8a7a62;">${escHtml(msg.content || msg.media_name || 'Media message')}</div>
+      </div>
+    `;
+  }).join('');
+  box.innerHTML = `
+    <div class="tag mb-1" style="color:#8a7a62;background:rgba(228,216,196,0.4);">SEARCH</div>
+    ${userHtml || messageHtml ? `${userHtml}${messageHtml}` : '<div class="text-xs px-2 py-3" style="color:#b0a08a;">No matches</div>'}
+  `;
+  box.classList.remove('hidden');
+}
+
+function openSearchMessage(roomId, messageId) {
+  const room = rooms.find(r => Number(r.id) === Number(roomId));
+  if (!room) return;
+  joinRoom(room).then(() => {
+    setTimeout(() => {
+      const el = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.style.outline = '2px solid rgba(212,168,83,0.8)';
+        setTimeout(() => { el.style.outline = 'none'; }, 1600);
+      }
+    }, 250);
+  });
 }
 
 function showCreateRoomModal() {

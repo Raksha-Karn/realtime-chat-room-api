@@ -1,4 +1,4 @@
-from sqlalchemy import func, DateTime, ForeignKey, String
+from sqlalchemy import func, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 from datetime import datetime
@@ -33,6 +33,9 @@ class Message(Base):
     __tablename__ = "messages"
     id: Mapped[int] = mapped_column(primary_key=True)
     content: Mapped[str] = mapped_column(String(2000), nullable=False)
+    message_type: Mapped[str] = mapped_column(String(20), default="text", nullable=False)
+    media_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), index=True, nullable=False)
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     room: Mapped["Room"] = relationship(back_populates="messages")

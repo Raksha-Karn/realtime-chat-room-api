@@ -13,6 +13,8 @@ import os
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
+if not SECRET_KEY or not ALGORITHM:
+    raise RuntimeError("SECRET_KEY and ALGORITHM must be configured")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -35,7 +37,7 @@ def get_user_from_token(token: str, db: Session):
         email = payload.get("sub")
         if email is None:
             return None
-        return db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        return db.execute(select(User).where(User.email == email, User.is_active == True, User.is_deleted == False)).scalar_one_or_none()
     except JWTError:
         return None
 

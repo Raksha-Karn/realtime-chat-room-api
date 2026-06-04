@@ -1,4 +1,4 @@
-from app.auth import decode_token, hash_password, verify_password, create_access_token
+from app.auth import hash_password, verify_password, create_access_token, decode_token
 from app.database import get_db
 from fastapi.security import OAuth2PasswordRequestForm
 from app.models import User
@@ -25,3 +25,11 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials!", headers={"WWW-Authenticate": "Bearer"})
     token = create_access_token({"sub": user.email})
     return {"access_token": token, "token_type": "bearer"}
+
+@router.get("/me")
+def get_me(current_user=Depends(decode_token)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+    }

@@ -14,6 +14,7 @@ dependencies = [
     "pydantic[email]>=2.13.4",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
     "python-dotenv>=1.2.2",
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.30",
